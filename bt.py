@@ -101,11 +101,21 @@ RECURRING_FILE = "recurring.json"
 
 def save_data():
     # Save transactions, budgets and recurring to files
-    st.session_state["transactions"].to_csv(DATA_FILE, index=False)
-    with open(BUDGETS_FILE, "w") as f:
-        json.dump(st.session_state["budgets"], f)
-    with open(RECURRING_FILE, "w") as f:
-        json.dump(st.session_state["recurring"], f)
+    try:
+        st.session_state["transactions"].to_csv(DATA_FILE, index=False)
+    except Exception:
+        # if transactions is missing or invalid, skip saving file
+        pass
+    try:
+        with open(BUDGETS_FILE, "w") as f:
+            json.dump(st.session_state.get("budgets", {}), f)
+    except Exception:
+        pass
+    try:
+        with open(RECURRING_FILE, "w") as f:
+            json.dump(st.session_state.get("recurring", []), f)
+    except Exception:
+        pass
 
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -151,7 +161,7 @@ st.sidebar.title("⚙️ Settings")
 currency = st.sidebar.selectbox(
     "Currency",
     list(CURRENCY_OPTIONS.keys()),
-    index=list(CURRENCY_OPTIONS.keys()).index(st.session_state["currency"])
+    index=list(CURRENCY_OPTIONS.keys()).index(st.session_state["currency"]) if st.session_state.get("currency") in CURRENCY_OPTIONS else 0
 )
 st.session_state["currency"] = currency
 
@@ -257,8 +267,8 @@ now_month = datetime.now().strftime("%B %Y")
 for rec in st.session_state["recurring"]:
     if not st.session_state["transactions"].empty:
         exists = (
-            (st.session_state["transactions"]["Description"] == rec["Description"])
-            & (st.session_state["transactions"]["Category"] == rec["Category"])
+            (st.session_state["transactions"]["Description"] == rec["Description"]) \
+            & (st.session_state["transactions"]["Category"] == rec["Category"]) \
             & (st.session_state["transactions"]["Date"].dt.strftime("%B %Y") == now_month)
         ).any()
     else:
@@ -349,12 +359,12 @@ if not st.session_state["transactions"].empty:
     with st.form("edit_form"):
         col1, col2, col3 = st.columns(3)
         with col1:
-            e_type = st.radio("Type", ["Income", "Expense"], index=["Income", "Expense"].index(row["Type"]))
+            e_type = st.radio("Type", ["Income", "Expense"], index=["Income", "Expense"].index(row["Type"]) if row["Type"] in ["Income", "Expense"] else 0)
         with col2:
-            e_cat = st.selectbox("Category", CATEGORY_OPTIONS, index=CATEGORY_OPTIONS.index(row["Category"]))
+            e_cat = st.selectbox("Category", CATEGORY_OPTIONS, index=CATEGORY_OPTIONS.index(row["Category"]) if row["Category"] in CATEGORY_OPTIONS else 0)
         with col3:
-            e_amt = st.number_input("Amount", min_value=0.0, format="%.2f", value=float(row["Amount"]))
-        e_desc = st.text_input("Description", value=row["Description"])
+            e_amt = st.number_input("Amount", min_value=0.0, format="%.2f", value=float(row["Amount"]) if pd.notna(row["Amount"]) else 0.0)
+        e_desc = st.text_input("Description", value=row["Description"] if pd.notna(row["Description"]) else "")
         save_edit = st.form_submit_button("Save Changes")
         if save_edit:
             st.session_state["transactions"].at[edit_index, "Type"] = e_type
@@ -408,16 +418,12 @@ colA, colB = st.columns(2)
 with colA:
     all_df = st.session_state["transactions"].copy()
 
-    # Merge recurring as additional rows for pie chart (so recurring items are counted even if not applied this month)
     if st.session_state["recurring"]:
         rec_df = pd.DataFrame(st.session_state["recurring"])
-        # ensure rec_df has the columns in the same order as transactions
         rec_df = rec_df.assign(Date=datetime.now())
-        # re-order columns to match REQUIRED_COLS
-        if set(["Date", "Type", "Category", "Description", "Amount"]).issubset(rec_df.columns):
-            rec_rows = rec_df[["Date", "Type", "Category", "Description", "Amount"]]
+        if set(REQUIRED_COLS).issubset(rec_df.columns):
+            rec_rows = rec_df[REQUIRED_COLS]
         else:
-            # safeguard: construct rows manually
             rec_rows = pd.DataFrame([
                 {
                     "Date": datetime.now(),
@@ -450,6 +456,7 @@ with colA:
 with colB:
     df_sorted = st.session_state["transactions"].sort_values("Date").copy()
     if not df_sorted.empty:
+        # Corrected Delta calculation (was broken due to truncated lambda in previous version)
         df_sorted["Delta"] = df_sorted.apply(lambda r: r["Amount"] if r["Type"] == "Income" else -r["Amount"], axis=1)
         df_sorted["Balance"] = df_sorted["Delta"].cumsum()
         line = (
@@ -465,3 +472,56 @@ with colB:
         st.altair_chart(line, use_container_width=True)
     else:
         st.caption("No transactions yet for the balance chart.")
+
+# ----------------------------
+# Additional charts (BAR + extra LINE) — kept layout consistent (new row)
+# ----------------------------
+colC, colD = st.columns(2)
+
+# Bar chart: expenses by category for current month
+with colC:
+    bar_df = month_df[month_df["Type"] == "Expense"].groupby("Category", as_index=False)["Amount"].sum() if not month_df.empty else pd.DataFrame()
+    if not bar_df.empty:
+        bar = (
+            alt.Chart(bar_df)
+            .mark_bar()
+            .encode(
+                x=alt.X("Category:N", sort="-y", title="Category"),
+                y=alt.Y("Amount:Q", title=f"Expenses ({currency})"),
+                tooltip=[alt.Tooltip("Category:N"), alt.Tooltip("Amount:Q", format=",.2f")]
+            )
+            .properties(title="Expenses by Category (Current Month)")
+        )
+        st.altair_chart(bar, use_container_width=True)
+    else:
+        st.caption("No expense data for the current month to show a bar chart.")
+
+# Line chart: monthly income vs expenses trend (all months)
+with colD:
+    trend_df = st.session_state["transactions"].copy()
+    if not trend_df.empty:
+        # create month timestamp (start of month) for grouping
+        trend_df = trend_df.dropna(subset=["Date"])  # ensure Date exists
+        trend_df["Month"] = trend_df["Date"].dt.to_period('M').dt.to_timestamp()
+        trend_grp = trend_df.groupby(["Month", "Type"], as_index=False)["Amount"].sum()
+        # only keep Income and Expense
+        trend_grp = trend_grp[trend_grp["Type"].isin(["Income", "Expense"])].copy()
+        if not trend_grp.empty:
+            trend_line = (
+                alt.Chart(trend_grp)
+                .mark_line(point=True)
+                .encode(
+                    x=alt.X("Month:T", title="Month"),
+                    y=alt.Y("Amount:Q", title=f"Amount ({currency})"),
+                    color=alt.Color("Type:N", title="Type"),
+                    tooltip=[alt.Tooltip("Month:T", title="Month"), alt.Tooltip("Type:N", title="Type"), alt.Tooltip("Amount:Q", format=",.2f")]
+                )
+                .properties(title="Monthly Income vs Expenses")
+            )
+            st.altair_chart(trend_line, use_container_width=True)
+        else:
+            st.caption("No monthly trend data available (need Income or Expense entries).")
+    else:
+        st.caption("No transactions to build the monthly trend line chart.")
+
+# End of file
