@@ -43,12 +43,12 @@ if "username" not in st.session_state:
     st.session_state["username"] = None
 
 if not st.session_state["authenticated"]:
-    st.title("🔐💼 Budget Tracker Pro – Login / Sign Up")
+    st.title("🔐 Budget Tracker Pro – Login / Sign Up")
 
     choice = st.radio("Choose an option", ["Login", "Sign Up"], horizontal=True)
 
-    username = st.text_input("👤Username")
-    password = st.text_input("🛡️Password", type="password")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
     users = load_users()
 
     if choice == "Sign Up":
@@ -465,4 +465,3 @@ with colB:
         st.altair_chart(line, use_container_width=True)
     else:
         st.caption("No transactions yet for the balance chart.")
-
