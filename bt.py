@@ -47,8 +47,8 @@ if not st.session_state["authenticated"]:
 
     choice = st.radio("Choose an option", ["Login", "Sign Up"], horizontal=True)
 
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
+    username = st.text_input("👤Username")
+    password = st.text_input("🛡️Password", type="🛡️password")
     users = load_users()
 
     if choice == "Sign Up":
@@ -525,3 +525,4 @@ with colD:
         st.caption("No transactions to build the monthly trend line chart.")
 
 # End of file
+
