@@ -7,7 +7,7 @@ import os
 import json
 import hashlib
 
-st.set_page_config(page_title="Budget Tracker Pro", page_icon="💰", layout="wide")
+st.set_page_config(page_title="Finance Log", page_icon="💰", layout="wide")
 
 # ----------------------------
 # Config
@@ -525,5 +525,6 @@ with colD:
         st.caption("No transactions to build the monthly trend line chart.")
 
 # End of file
+
 
 
