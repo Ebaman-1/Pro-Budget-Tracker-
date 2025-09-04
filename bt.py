@@ -43,7 +43,7 @@ if "username" not in st.session_state:
     st.session_state["username"] = None
 
 if not st.session_state["authenticated"]:
-    st.title("🔐 Budget Tracker Pro – Login / Sign Up")
+    st.title("🔐 Finance Log – Login / Sign Up")
 
     choice = st.radio("Choose an option", ["Login", "Sign Up"], horizontal=True)
 
@@ -209,7 +209,7 @@ else:
 # ----------------------------
 # Header
 # ----------------------------
-st.title("💰 Budget Tracker Pro")
+st.title("💰 Finance Log")
 st.caption(f"Welcome, {st.session_state['username']}! Track income & expenses, budgets, recurring items, charts, and import/export.")
 
 # ----------------------------
@@ -525,6 +525,7 @@ with colD:
         st.caption("No transactions to build the monthly trend line chart.")
 
 # End of file
+
 
 
 
